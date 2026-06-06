@@ -4,6 +4,8 @@ __pycache__/
 .mypy_cache/
 .pytest_cache/
 .pytest-tmp/
+.pytest-tmp-codex/
+.pytest-tmp-codex-*/
 .ruff_cache/
 .coverage
 htmlcov/
@@ -11,3 +13,4 @@ build/
 dist/
 data/
 .secrets.baseline
+dashboard*.log

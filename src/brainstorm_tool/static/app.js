@@ -60,12 +60,14 @@ function renderEmpty(node, text) {
 async function renderOverview() {
   stopEditing();
   app.replaceChildren(overviewTemplate.content.cloneNode(true));
-  const [ideasData, graph] = await Promise.all([
+  const [ideasData, graph, draftsData] = await Promise.all([
     api("/api/ideas"),
     api("/api/graph"),
+    api("/api/drafts"),
   ]);
   const ideaList = document.querySelector("#ideaList");
   document.querySelector("#ideaCount").textContent = ideasData.ideas.length;
+  document.querySelector("#draftCount").textContent = draftsData.drafts.length;
 
   if (ideasData.ideas.length === 0) {
     renderEmpty(ideaList, "No ideas recorded.");
@@ -92,33 +94,140 @@ async function renderOverview() {
   }
 
   drawGraph(graph);
-  document.querySelector("#newIdeaForm").addEventListener("submit", createIdea);
+  renderDraftInbox(draftsData.drafts);
+  document.querySelector("#quickCaptureForm").addEventListener("submit", captureDraft);
 }
 
-async function createIdea(event) {
+async function captureDraft(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  const data = Object.fromEntries(new FormData(form));
-  const idea = await api("/api/ideas", {
+  const data = {
+    ...Object.fromEntries(new FormData(form)),
+    source: "dashboard",
+  };
+  await api("/api/drafts", {
     method: "POST",
     body: JSON.stringify(data),
   });
-  history.pushState({}, "", `/ideas/${idea.idea_id}`);
-  await renderDetail(idea.idea_id);
+  form.reset();
+  await renderOverview();
+}
+
+function renderDraftInbox(drafts) {
+  const node = document.querySelector("#draftInbox");
+  if (drafts.length === 0) {
+    renderEmpty(node, "No captured drafts.");
+    return;
+  }
+  node.replaceChildren(
+    ...drafts.map((draft) => {
+      const row = document.createElement("article");
+      row.className = "draft-row";
+      row.innerHTML = `
+        <div>
+          <div class="draft-title">Draft ${draft.draft_id}</div>
+          <div class="draft-message">${escapeHtml(draft.raw_message)}</div>
+          <div class="meta-line">
+            <span class="status-pill">${statusLabel(draft.status)}</span>
+            <span class="meta">${escapeHtml(draft.source)}</span>
+          </div>
+        </div>
+        <button class="ghost-button" type="button">Refine</button>
+      `;
+      row.querySelector("button").addEventListener("click", () => {
+        showRefinementPrompt(draft.draft_id);
+      });
+      return row;
+    }),
+  );
+}
+
+function bindPromptCopy() {
+  const copyButton = document.querySelector("#copyPromptButton");
+  const prompt = document.querySelector("#refinePrompt");
+  if (!copyButton || !prompt) {
+    return;
+  }
+  copyButton.addEventListener("click", async () => {
+    await copyText(prompt);
+    copyButton.textContent = "Copied";
+    window.setTimeout(() => {
+      copyButton.textContent = "Copy";
+    }, 1400);
+  });
+}
+
+async function copyText(prompt) {
+  if (navigator.clipboard) {
+    await navigator.clipboard.writeText(prompt.value);
+    return;
+  }
+  prompt.focus();
+  prompt.select();
+  document.execCommand("copy");
+}
+
+async function showRefinementPrompt(draftId) {
+  const result = await api(`/api/drafts/${draftId}/refine-prompt`, {
+    method: "POST",
+  });
+  const panel = document.querySelector("#refinePromptPanel");
+  const prompt = document.querySelector("#refinePrompt");
+  panel.hidden = false;
+  prompt.value = result.prompt;
+  bindPromptCopy();
+  prompt.focus();
+  prompt.select();
+  await renderOverview();
+  document.querySelector("#refinePromptPanel").hidden = false;
+  document.querySelector("#refinePrompt").value = result.prompt;
+  bindPromptCopy();
 }
 
 function drawGraph(graph) {
   const svg = document.querySelector("#graphSvg");
   svg.replaceChildren();
   const width = svg.clientWidth || 420;
-  const height = Math.max(svg.clientHeight || 360, 320);
+  const height = Math.max(svg.clientHeight || 560, 480);
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  const defs = svgNode("defs", {});
+  const glow = svgNode("filter", {
+    id: "nodeGlow",
+    x: "-30%",
+    y: "-30%",
+    width: "160%",
+    height: "160%",
+  });
+  glow.append(
+    svgNode("feDropShadow", {
+      dx: "0",
+      dy: "8",
+      stdDeviation: "6",
+      "flood-color": "#000000",
+      "flood-opacity": "0.28",
+    }),
+  );
+  const marker = svgNode("marker", {
+    id: "arrow",
+    viewBox: "0 0 10 10",
+    refX: "8",
+    refY: "5",
+    markerWidth: "6",
+    markerHeight: "6",
+    orient: "auto-start-reverse",
+  });
+  marker.append(svgNode("path", { d: "M 0 0 L 10 5 L 0 10 z", fill: "#62b6cb" }));
+  defs.append(glow, marker);
+  svg.append(defs);
+
   if (graph.nodes.length === 0) {
     const text = svgNode("text", {
       x: width / 2,
       y: height / 2,
       "text-anchor": "middle",
-      fill: "#6f6a60",
+      fill: "#a7c5cd",
+      "font-size": "14",
+      "font-weight": "700",
     });
     text.textContent = "No graph data";
     svg.append(text);
@@ -126,15 +235,16 @@ function drawGraph(graph) {
   }
 
   const centerX = width / 2;
-  const centerY = height / 2;
-  const radius = Math.min(width, height) * 0.34;
+  const centerY = height / 2 - 8;
+  const radiusX = Math.max(96, Math.min(width * 0.36, 260));
+  const radiusY = Math.max(92, Math.min(height * 0.31, 210));
   const positions = new Map();
 
   graph.nodes.forEach((node, index) => {
     const angle = (Math.PI * 2 * index) / graph.nodes.length - Math.PI / 2;
     positions.set(node.idea_id, {
-      x: centerX + Math.cos(angle) * radius,
-      y: centerY + Math.sin(angle) * radius,
+      x: centerX + Math.cos(angle) * radiusX,
+      y: centerY + Math.sin(angle) * radiusY,
     });
   });
 
@@ -144,52 +254,96 @@ function drawGraph(graph) {
     if (!source || !target) {
       return;
     }
-    const line = svgNode("line", {
-      x1: source.x,
-      y1: source.y,
-      x2: target.x,
-      y2: target.y,
-      stroke: "#315f78",
+    const curveX = (source.x + target.x) / 2 + (target.y - source.y) * 0.08;
+    const curveY = (source.y + target.y) / 2 - (target.x - source.x) * 0.08;
+    const path = svgNode("path", {
+      d: `M ${source.x} ${source.y} Q ${curveX} ${curveY} ${target.x} ${target.y}`,
+      fill: "none",
+      stroke: "#62b6cb",
       "stroke-width": "2",
+      "stroke-opacity": "0.72",
+      "marker-end": "url(#arrow)",
     });
-    svg.append(line);
+    svg.append(path);
+    if (edge.label) {
+      const label = svgNode("text", {
+        x: curveX,
+        y: curveY - 6,
+        "text-anchor": "middle",
+        fill: "#b8dbe3",
+        "font-size": "11",
+        "font-weight": "700",
+      });
+      label.textContent = edge.label.slice(0, 18);
+      svg.append(label);
+    }
   });
 
   graph.nodes.forEach((node) => {
     const point = positions.get(node.idea_id);
     const group = svgNode("g", {});
+    const halo = svgNode("circle", {
+      cx: point.x,
+      cy: point.y,
+      r: 35,
+      fill: statusColor(node.status),
+      opacity: "0.18",
+    });
     const circle = svgNode("circle", {
       cx: point.x,
       cy: point.y,
-      r: 24,
+      r: 25,
       fill: statusColor(node.status),
-      stroke: "#20201d",
-      "stroke-width": "1",
+      stroke: "rgb(255 255 255 / 72%)",
+      "stroke-width": "2",
+      filter: "url(#nodeGlow)",
     });
+    const version = svgNode("text", {
+      x: point.x,
+      y: point.y + 5,
+      "text-anchor": "middle",
+      fill: "#ffffff",
+      "font-size": "13",
+      "font-weight": "800",
+    });
+    version.textContent = `v${node.version_number}`;
     const text = svgNode("text", {
       x: point.x,
-      y: point.y + 44,
+      y: point.y + 50,
       "text-anchor": "middle",
-      fill: "#20201d",
+      fill: "#f3fbfc",
       "font-size": "12",
       "font-weight": "700",
     });
-    text.textContent = node.title.slice(0, 18);
-    group.append(circle, text);
+    text.textContent = trimGraphLabel(node.title);
+    const status = svgNode("text", {
+      x: point.x,
+      y: point.y + 66,
+      "text-anchor": "middle",
+      fill: "#99b9c2",
+      "font-size": "10",
+      "font-weight": "700",
+    });
+    status.textContent = statusLabel(node.status);
+    group.append(halo, circle, version, text, status);
     svg.append(group);
   });
 }
 
+function trimGraphLabel(value) {
+  return value.length > 20 ? `${value.slice(0, 19)}...` : value;
+}
+
 function statusColor(status) {
   return {
-    seed: "#ede4d5",
-    exploring: "#d7c57f",
-    active: "#9ab08f",
-    paused: "#c9c1b4",
-    researched: "#9ab7c8",
-    shipped: "#456b50",
-    archived: "#bba5a0",
-  }[status] || "#ede4d5";
+    seed: "#9aa4ac",
+    exploring: "#b7791f",
+    active: "#2f6f5f",
+    paused: "#747d83",
+    researched: "#246a8f",
+    shipped: "#1f8a70",
+    archived: "#8c5f5b",
+  }[status] || "#9aa4ac";
 }
 
 async function renderDetail(ideaId) {

@@ -5,7 +5,10 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import subprocess
 import sys
+import time
+import webbrowser
 
 from brainstorm_tool.models import IdeaStatus
 from brainstorm_tool.store import BrainstormStore
@@ -51,6 +54,50 @@ def _build_parser() -> argparse.ArgumentParser:
     list_parser = subparsers.add_parser("list", help="List ideas")
     list_parser.add_argument("--json", action="store_true")
     list_parser.set_defaults(handler=_handle_list)
+
+    draft_add_parser = subparsers.add_parser(
+        "draft-add",
+        help="Internal agent command: capture a raw idea draft",
+    )
+    draft_add_parser.add_argument("--message", default=None)
+    draft_add_parser.add_argument("--message-file", type=Path, default=None)
+    draft_add_parser.add_argument("--source", default="agent")
+    draft_add_parser.set_defaults(handler=_handle_draft_add)
+
+    draft_list_parser = subparsers.add_parser(
+        "draft-list",
+        help="Internal agent command: list captured idea drafts",
+    )
+    draft_list_parser.set_defaults(handler=_handle_draft_list)
+
+    draft_show_parser = subparsers.add_parser(
+        "draft-show",
+        help="Internal agent command: show a captured idea draft",
+    )
+    draft_show_parser.add_argument("draft_id", type=int)
+    draft_show_parser.set_defaults(handler=_handle_draft_show)
+
+    draft_refine_parser = subparsers.add_parser(
+        "draft-refine-prompt",
+        help="Internal agent command: emit a draft refinement prompt",
+    )
+    draft_refine_parser.add_argument("draft_id", type=int)
+    draft_refine_parser.set_defaults(handler=_handle_draft_refine_prompt)
+
+    draft_accept_parser = subparsers.add_parser(
+        "draft-accept",
+        help="Internal agent command: link a captured draft to an accepted idea",
+    )
+    draft_accept_parser.add_argument("draft_id", type=int)
+    draft_accept_parser.add_argument("idea_id")
+    draft_accept_parser.set_defaults(handler=_handle_draft_accept)
+
+    draft_archive_parser = subparsers.add_parser(
+        "draft-archive",
+        help="Internal agent command: archive a captured idea draft",
+    )
+    draft_archive_parser.add_argument("draft_id", type=int)
+    draft_archive_parser.set_defaults(handler=_handle_draft_archive)
 
     show_parser = subparsers.add_parser("show", help="Show one idea as JSON")
     show_parser.add_argument("idea_id")
@@ -126,6 +173,15 @@ def _build_parser() -> argparse.ArgumentParser:
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=8765)
     serve_parser.set_defaults(handler=_handle_serve)
+
+    open_parser = subparsers.add_parser(
+        "open-dashboard",
+        help="Start the dashboard server in a new process and open a browser",
+    )
+    open_parser.add_argument("--host", default="127.0.0.1")
+    open_parser.add_argument("--port", type=int, default=8765)
+    open_parser.add_argument("--no-browser", action="store_true")
+    open_parser.set_defaults(handler=_handle_open_dashboard)
     return parser
 
 
@@ -153,6 +209,43 @@ def _handle_list(args: argparse.Namespace, store: BrainstormStore) -> str:
             f"{idea.status.value:<10} {idea.title}"
         )
     return "\n".join(lines)
+
+
+def _handle_draft_add(args: argparse.Namespace, store: BrainstormStore) -> str:
+    draft = store.capture_idea_draft(
+        raw_message=_read_content(args.message, args.message_file),
+        source=args.source,
+    )
+    return json.dumps(draft.to_dict(), indent=2)
+
+
+def _handle_draft_list(args: argparse.Namespace, store: BrainstormStore) -> str:
+    drafts = [draft.to_dict() for draft in store.list_idea_drafts()]
+    return json.dumps(drafts, indent=2)
+
+
+def _handle_draft_show(args: argparse.Namespace, store: BrainstormStore) -> str:
+    draft = store.get_idea_draft(args.draft_id)
+    return json.dumps(draft.to_dict(), indent=2)
+
+
+def _handle_draft_refine_prompt(
+    args: argparse.Namespace,
+    store: BrainstormStore,
+) -> str:
+    prompt = store.refinement_prompt(args.draft_id)
+    draft = store.get_idea_draft(args.draft_id)
+    return json.dumps({"prompt": prompt, "draft": draft.to_dict()}, indent=2)
+
+
+def _handle_draft_accept(args: argparse.Namespace, store: BrainstormStore) -> str:
+    draft = store.accept_idea_draft(args.draft_id, args.idea_id)
+    return json.dumps(draft.to_dict(), indent=2)
+
+
+def _handle_draft_archive(args: argparse.Namespace, store: BrainstormStore) -> str:
+    draft = store.archive_idea_draft(args.draft_id)
+    return json.dumps(draft.to_dict(), indent=2)
 
 
 def _handle_show(args: argparse.Namespace, store: BrainstormStore) -> str:
@@ -241,6 +334,51 @@ def _handle_agent_prompt(args: argparse.Namespace, store: BrainstormStore) -> st
 def _handle_serve(args: argparse.Namespace, store: BrainstormStore) -> None:
     serve(store.db_path, args.host, args.port)
     return None
+
+
+def _handle_open_dashboard(args: argparse.Namespace, store: BrainstormStore) -> str:
+    url = f"http://{args.host}:{args.port}/"
+    process = _start_dashboard_server(store.db_path, args.host, args.port)
+    time.sleep(1.0)
+    if not args.no_browser:
+        webbrowser.open(url)
+    return f"Dashboard server started on {url} (pid {process.pid})."
+
+
+def _start_dashboard_server(
+    db_path: Path,
+    host: str,
+    port: int,
+) -> subprocess.Popen[bytes]:
+    command = [
+        sys.executable,
+        "-m",
+        "brainstorm_tool.cli",
+        "--db",
+        str(db_path),
+        "serve",
+        "--host",
+        host,
+        "--port",
+        str(port),
+    ]
+    if sys.platform == "win32":
+        return subprocess.Popen(  # noqa: S603 - command uses this interpreter.
+            command,
+            cwd=Path.cwd(),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+        )
+    return subprocess.Popen(  # noqa: S603 - command uses this interpreter.
+        command,
+        cwd=Path.cwd(),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
 
 
 def _read_content(content: str | None, content_file: Path | None) -> str:

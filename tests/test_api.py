@@ -34,6 +34,38 @@ def test_api_creates_lists_and_fetches_idea(tmp_path: Path) -> None:
     assert fetched.body["current_version"]["version_number"] == 1
 
 
+def test_api_captures_and_lists_idea_drafts(tmp_path: Path) -> None:
+    api = _api(tmp_path)
+
+    created = api.dispatch(
+        "POST",
+        "/api/drafts",
+        {"raw_message": "add a new idea: dashboard inbox", "source": "dashboard"},
+    )
+    listed = api.dispatch("GET", "/api/drafts", None)
+
+    assert created.status_code == 201
+    assert created.body["draft_id"] == 1
+    assert listed.body["drafts"][0]["raw_message"] == (
+        "add a new idea: dashboard inbox"
+    )
+
+
+def test_api_returns_refinement_prompt(tmp_path: Path) -> None:
+    api = _api(tmp_path)
+    api.dispatch(
+        "POST",
+        "/api/drafts",
+        {"raw_message": "rough idea", "source": "dashboard"},
+    )
+
+    prompt = api.dispatch("POST", "/api/drafts/1/refine-prompt", None)
+
+    assert prompt.status_code == 200
+    assert "Refine draft 1" in prompt.body["prompt"]
+    assert prompt.body["draft"]["status"] == "refining"
+
+
 def test_api_saves_draft_and_version(tmp_path: Path) -> None:
     api = _api(tmp_path)
     created = api.dispatch(

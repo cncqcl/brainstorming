@@ -18,6 +18,44 @@ class IdeaStatus(str, Enum):
     ARCHIVED = "archived"
 
 
+class IdeaDraftStatus(str, Enum):
+    """Lifecycle status for a captured rough idea draft."""
+
+    CAPTURED = "captured"
+    REFINING = "refining"
+    ACCEPTED = "accepted"
+    ARCHIVED = "archived"
+
+
+@dataclass(frozen=True)
+class IdeaDraft:
+    """Raw idea message captured before refinement."""
+
+    draft_id: int
+    raw_message: str
+    source: str
+    status: IdeaDraftStatus
+    created_at: str
+    updated_at: str
+    refinement_prompt: str
+    last_refined_at: str | None
+    accepted_idea_id: str | None
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-compatible representation."""
+        return {
+            "draft_id": self.draft_id,
+            "raw_message": self.raw_message,
+            "source": self.source,
+            "status": self.status.value,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "refinement_prompt": self.refinement_prompt,
+            "last_refined_at": self.last_refined_at,
+            "accepted_idea_id": self.accepted_idea_id,
+        }
+
+
 @dataclass(frozen=True)
 class IdeaVersion:
     """Stored version of an idea body."""

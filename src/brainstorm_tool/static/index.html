@@ -42,39 +42,44 @@
           <svg id="graphSvg" class="graph" role="img"></svg>
         </div>
 
-        <form id="newIdeaForm" class="entry-surface">
+        <form id="quickCaptureForm" class="entry-surface">
           <div class="section-header">
             <div>
-              <p class="eyebrow">Register</p>
-              <h2>New Idea</h2>
+              <p class="eyebrow">Capture</p>
+              <h2>Quick Draft</h2>
             </div>
           </div>
           <label>
-            Title
-            <input name="title" required autocomplete="off" />
+            Rough idea
+            <textarea
+              name="raw_message"
+              required
+              rows="8"
+              placeholder="add a new idea: ..."
+            ></textarea>
           </label>
-          <label>
-            Brief
-            <input name="brief" required autocomplete="off" />
-          </label>
-          <label>
-            Status
-            <select name="status">
-              <option value="seed">Seed</option>
-              <option value="exploring">Exploring</option>
-              <option value="active">Active</option>
-              <option value="paused">Paused</option>
-              <option value="researched">Researched</option>
-              <option value="shipped">Shipped</option>
-              <option value="archived">Archived</option>
-            </select>
-          </label>
-          <label>
-            Content
-            <textarea name="content" required rows="8"></textarea>
-          </label>
-          <button class="primary-button" type="submit">Create</button>
+          <button class="primary-button" type="submit">Save Draft</button>
         </form>
+
+        <div class="draft-inbox-surface">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Inbox</p>
+              <h2>Captured Drafts</h2>
+            </div>
+            <span id="draftCount" class="counter">0</span>
+          </div>
+          <div id="draftInbox" class="draft-inbox"></div>
+          <div id="refinePromptPanel" class="prompt-panel" hidden>
+            <div class="prompt-header">
+              <p class="eyebrow">Agent Prompt</p>
+              <button id="copyPromptButton" class="ghost-button compact-button" type="button">
+                Copy
+              </button>
+            </div>
+            <textarea id="refinePrompt" readonly rows="7"></textarea>
+          </div>
+        </div>
       </section>
     </template>
 

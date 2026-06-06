@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Brainstorm Dashboard Preview</title>
+    <link rel="stylesheet" href="/preview.css" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">B</span>
+        <span>Brainstorm</span>
+      </div>
+      <button class="new-button" type="button">New Idea</button>
+      <nav class="nav-list">
+        <a class="active" href="#">Inbox <span>2</span></a>
+        <a href="#">Exploring <span>2</span></a>
+        <a href="#">Active <span>0</span></a>
+        <a href="#">Paused <span>0</span></a>
+        <a href="#">Archived <span>0</span></a>
+      </nav>
+      <div class="sidebar-section">
+        <p>Recent</p>
+        <a href="#">Brainstorm tool workspace</a>
+        <a href="#">Coding agent best practices</a>
+      </div>
+    </aside>
+
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Workspace</p>
+          <h1>Ideas</h1>
+        </div>
+        <div class="toolbar">
+          <input value="" placeholder="Search ideas" />
+          <button type="button">List</button>
+          <button type="button">Map</button>
+        </div>
+      </header>
+
+      <section class="content-grid">
+        <section class="list-pane">
+          <div class="table-head">
+            <span>Idea</span>
+            <span>Status</span>
+            <span>Version</span>
+            <span>Updated</span>
+          </div>
+          <article class="idea-row selected">
+            <div>
+              <strong>Brainstorm tool workspace</strong>
+              <p>Versioned idea tracker with CLI agent workflow and dashboard.</p>
+            </div>
+            <span class="status exploring">Exploring</span>
+            <span>v1</span>
+            <span>Today</span>
+          </article>
+          <article class="idea-row">
+            <div>
+              <strong>Coding agent best practices dashboard</strong>
+              <p>Living dashboard of Claude Code, Codex, OpenCode workflows.</p>
+            </div>
+            <span class="status exploring">Exploring</span>
+            <span>v1</span>
+            <span>Today</span>
+          </article>
+        </section>
+
+        <section class="workbench">
+          <div class="workbench-head">
+            <div>
+              <p class="eyebrow">Selected Idea</p>
+              <h2>Brainstorm tool workspace</h2>
+            </div>
+            <div class="actions">
+              <select>
+                <option>Exploring</option>
+                <option>Active</option>
+                <option>Paused</option>
+              </select>
+              <button type="button">Edit</button>
+              <button class="save" type="button">Save</button>
+            </div>
+          </div>
+
+          <div class="tabs">
+            <button class="active" type="button">Content</button>
+            <button type="button">Research</button>
+            <button type="button">Comments</button>
+            <button type="button">History</button>
+            <button type="button">Links</button>
+          </div>
+
+          <div class="editor-preview">
+            <section class="markdown-box">
+              <p class="line"># Brainstorm Tool</p>
+              <p class="line">Maintain a practical workspace for recording ideas,</p>
+              <p class="line">tracking progress, and iterating over time.</p>
+              <p class="line muted">Draft cached 14:30 · v1 current</p>
+            </section>
+            <section class="render-box">
+              <h3>Brainstorm Tool</h3>
+              <p>
+                Maintain a practical workspace for recording ideas, tracking
+                progress, and iterating over time.
+              </p>
+              <ul>
+                <li>CLI for coding agents and phone workflows.</li>
+                <li>Browser dashboard as the main workspace.</li>
+                <li>Version history, comments, annotations, and research notes.</li>
+              </ul>
+            </section>
+          </div>
+        </section>
+
+        <aside class="context-pane">
+          <section>
+            <div class="panel-head">
+              <p class="eyebrow">Local Map</p>
+              <button type="button">Full Map</button>
+            </div>
+            <div class="mini-map">
+              <span class="node center">Brainstorm</span>
+              <span class="node one">CLI</span>
+              <span class="node two">Dashboard</span>
+              <span class="node three">Agent Notes</span>
+            </div>
+          </section>
+
+          <section>
+            <p class="eyebrow">Comments</p>
+            <div class="note">
+              <strong>UI</strong>
+              <p>Graph editing should be deliberate, not auto-inferred.</p>
+            </div>
+          </section>
+
+          <section>
+            <p class="eyebrow">Agent Research</p>
+            <div class="note">
+              <strong>Comparable tools</strong>
+              <p>Review Obsidian Canvas, Capacities, and Linear patterns.</p>
+            </div>
+          </section>
+
+          <section>
+            <p class="eyebrow">History</p>
+            <div class="timeline">
+              <button type="button">v1 Initial idea</button>
+              <button type="button">Draft cached 14:30</button>
+            </div>
+          </section>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>

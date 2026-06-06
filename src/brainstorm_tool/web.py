@@ -28,7 +28,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
     api: ApiApp
     static_dir: Path
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         """Handle GET requests."""
         path = urlparse(self.path).path
         if path.startswith("/api/"):
@@ -36,11 +36,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         self._send_static(path)
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         """Handle POST requests."""
         self._send_api("POST", self._read_json())
 
-    def do_DELETE(self) -> None:  # noqa: N802
+    def do_DELETE(self) -> None:
         """Handle DELETE requests."""
         self._send_api("DELETE", self._read_json())
 

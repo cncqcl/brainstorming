@@ -30,6 +30,58 @@ def test_create_idea_starts_at_version_one(tmp_path: Path) -> None:
     )
 
 
+def test_capture_idea_draft_returns_visible_id(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+
+    draft = store.capture_idea_draft(
+        raw_message="add a new idea: collect agent best practices",
+        source="agent",
+    )
+
+    assert draft.draft_id == 1
+    assert draft.raw_message == "add a new idea: collect agent best practices"
+    assert draft.source == "agent"
+    assert draft.status == "captured"
+    assert draft.accepted_idea_id is None
+
+
+def test_list_and_get_idea_drafts(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    first = store.capture_idea_draft("first idea", source="dashboard")
+    second = store.capture_idea_draft("second idea", source="agent")
+
+    drafts = store.list_idea_drafts()
+
+    assert [draft.draft_id for draft in drafts] == [
+        second.draft_id,
+        first.draft_id,
+    ]
+    assert store.get_idea_draft(first.draft_id).raw_message == "first idea"
+
+
+def test_refine_prompt_marks_draft_refining(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    draft = store.capture_idea_draft("rough idea", source="dashboard")
+
+    prompt = store.refinement_prompt(draft.draft_id)
+    updated = store.get_idea_draft(draft.draft_id)
+
+    assert "Refine draft 1" in prompt
+    assert "Brainstorm Tool project skill" in prompt
+    assert updated.status == "refining"
+
+
+def test_accept_idea_draft_links_to_idea(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    draft = store.capture_idea_draft("rough idea", source="agent")
+    idea = store.create_idea("Refined", "Refined brief.", "Refined body.")
+
+    accepted = store.accept_idea_draft(draft.draft_id, idea.idea_id)
+
+    assert accepted.status == "accepted"
+    assert accepted.accepted_idea_id == idea.idea_id
+
+
 def test_cache_draft_keeps_last_five_real_differences(tmp_path: Path) -> None:
     store = _store(tmp_path)
     idea = store.create_idea("Graph", "Map idea links.", "Current version")

@@ -18,6 +18,8 @@ from brainstorm_tool.models import (
     DraftSnapshot,
     GraphNode,
     IdeaDetail,
+    IdeaDraft,
+    IdeaDraftStatus,
     IdeaStatus,
     IdeaSummary,
     IdeaVersion,
@@ -45,6 +47,15 @@ def _summary_from_content(content: str, limit: int = 120) -> str:
     if len(first_line) <= limit:
         return first_line
     return f"{first_line[: limit - 1]}..."
+
+
+def _draft_refinement_prompt(draft_id: int) -> str:
+    return (
+        f"Refine draft {draft_id} using the Brainstorm Tool project skill. "
+        "Ask me any needed questions, update the local database when the "
+        "refined idea is ready, mark the draft accepted, and tell me to "
+        "refresh the dashboard."
+    )
 
 
 def _last_row_id(cursor: sqlite3.Cursor) -> int:
@@ -155,6 +166,221 @@ class BrainstormStore:
                 """
             ).fetchall()
         return [self._summary_from_row(row) for row in rows]
+
+    def capture_idea_draft(self, raw_message: str, source: str) -> IdeaDraft:
+        """Capture a rough idea message before refinement.
+
+        Args:
+            raw_message: Natural-language idea text from a user or agent.
+            source: Capture source such as dashboard or agent.
+
+        Returns:
+            Captured draft with a visible draft id.
+
+        Raises:
+            ValidationError: If required fields are empty.
+            DatabaseError: If SQLite rejects the insert.
+        """
+        clean_message = _require_text(raw_message, "raw_message")
+        clean_source = _require_text(source, "source")
+        timestamp = _utc_now()
+        try:
+            with self._connect() as connection:
+                cursor = connection.execute(
+                    """
+                    INSERT INTO idea_drafts
+                        (raw_message, source, status, created_at, updated_at,
+                         refinement_prompt)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        clean_message,
+                        clean_source,
+                        IdeaDraftStatus.CAPTURED.value,
+                        timestamp,
+                        timestamp,
+                        "pending",
+                    ),
+                )
+                draft_id = _last_row_id(cursor)
+                prompt = _draft_refinement_prompt(draft_id)
+                connection.execute(
+                    """
+                    UPDATE idea_drafts
+                    SET refinement_prompt = ?
+                    WHERE id = ?
+                    """,
+                    (prompt, draft_id),
+                )
+        except sqlite3.Error as exc:
+            raise DatabaseError("Failed to capture idea draft") from exc
+        return self.get_idea_draft(draft_id)
+
+    def list_idea_drafts(self) -> list[IdeaDraft]:
+        """Return captured rough idea drafts ordered newest first.
+
+        Returns:
+            Captured drafts.
+        """
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    raw_message,
+                    source,
+                    status,
+                    created_at,
+                    updated_at,
+                    refinement_prompt,
+                    last_refined_at,
+                    accepted_idea_id
+                FROM idea_drafts
+                ORDER BY created_at DESC, id DESC
+                """
+            ).fetchall()
+        return [self._idea_draft_from_row(row) for row in rows]
+
+    def get_idea_draft(self, draft_id: int) -> IdeaDraft:
+        """Return one captured idea draft.
+
+        Args:
+            draft_id: Captured draft primary key.
+
+        Returns:
+            Matching captured draft.
+
+        Raises:
+            NotFoundError: If the draft does not exist.
+        """
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    id,
+                    raw_message,
+                    source,
+                    status,
+                    created_at,
+                    updated_at,
+                    refinement_prompt,
+                    last_refined_at,
+                    accepted_idea_id
+                FROM idea_drafts
+                WHERE id = ?
+                """,
+                (draft_id,),
+            ).fetchone()
+        if row is None:
+            raise NotFoundError(f"Idea draft {draft_id!r} was not found")
+        return self._idea_draft_from_row(row)
+
+    def refinement_prompt(self, draft_id: int) -> str:
+        """Mark a captured draft as refining and return its agent prompt.
+
+        Args:
+            draft_id: Captured draft primary key.
+
+        Returns:
+            Prompt to paste into a coding agent.
+
+        Raises:
+            NotFoundError: If the draft does not exist.
+            DatabaseError: If SQLite rejects the update.
+        """
+        timestamp = _utc_now()
+        prompt = _draft_refinement_prompt(draft_id)
+        try:
+            with self._connect() as connection:
+                cursor = connection.execute(
+                    """
+                    UPDATE idea_drafts
+                    SET status = ?, updated_at = ?, last_refined_at = ?,
+                        refinement_prompt = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        IdeaDraftStatus.REFINING.value,
+                        timestamp,
+                        timestamp,
+                        prompt,
+                        draft_id,
+                    ),
+                )
+                if cursor.rowcount == 0:
+                    raise NotFoundError(f"Idea draft {draft_id!r} was not found")
+        except sqlite3.Error as exc:
+            raise DatabaseError("Failed to prepare refinement prompt") from exc
+        return prompt
+
+    def accept_idea_draft(self, draft_id: int, idea_id: str) -> IdeaDraft:
+        """Mark a captured draft as accepted and link it to an idea.
+
+        Args:
+            draft_id: Captured draft primary key.
+            idea_id: Accepted idea created or updated from the draft.
+
+        Returns:
+            Updated captured draft.
+
+        Raises:
+            NotFoundError: If the draft or idea does not exist.
+            DatabaseError: If SQLite rejects the update.
+        """
+        self._ensure_idea_exists(idea_id)
+        timestamp = _utc_now()
+        try:
+            with self._connect() as connection:
+                cursor = connection.execute(
+                    """
+                    UPDATE idea_drafts
+                    SET status = ?, updated_at = ?, last_refined_at = ?,
+                        accepted_idea_id = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        IdeaDraftStatus.ACCEPTED.value,
+                        timestamp,
+                        timestamp,
+                        idea_id,
+                        draft_id,
+                    ),
+                )
+                if cursor.rowcount == 0:
+                    raise NotFoundError(f"Idea draft {draft_id!r} was not found")
+        except sqlite3.Error as exc:
+            raise DatabaseError("Failed to accept idea draft") from exc
+        return self.get_idea_draft(draft_id)
+
+    def archive_idea_draft(self, draft_id: int) -> IdeaDraft:
+        """Archive a captured draft without accepting it.
+
+        Args:
+            draft_id: Captured draft primary key.
+
+        Returns:
+            Updated captured draft.
+
+        Raises:
+            NotFoundError: If the draft does not exist.
+            DatabaseError: If SQLite rejects the update.
+        """
+        timestamp = _utc_now()
+        try:
+            with self._connect() as connection:
+                cursor = connection.execute(
+                    """
+                    UPDATE idea_drafts
+                    SET status = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (IdeaDraftStatus.ARCHIVED.value, timestamp, draft_id),
+                )
+                if cursor.rowcount == 0:
+                    raise NotFoundError(f"Idea draft {draft_id!r} was not found")
+        except sqlite3.Error as exc:
+            raise DatabaseError("Failed to archive idea draft") from exc
+        return self.get_idea_draft(draft_id)
 
     def get_idea(self, idea_id: str) -> IdeaDetail:
         """Return one idea with current version and related workspace data.
@@ -712,6 +938,21 @@ class BrainstormStore:
                 FOREIGN KEY (idea_id) REFERENCES ideas(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS idea_drafts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                raw_message TEXT NOT NULL,
+                source TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                refinement_prompt TEXT NOT NULL,
+                last_refined_at TEXT,
+                accepted_idea_id TEXT,
+                FOREIGN KEY (accepted_idea_id)
+                    REFERENCES ideas(id)
+                    ON DELETE SET NULL
+            );
+
             CREATE TABLE IF NOT EXISTS comments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 idea_id TEXT NOT NULL,
@@ -772,6 +1013,7 @@ class BrainstormStore:
                 FOREIGN KEY (source_id) REFERENCES ideas(id) ON DELETE CASCADE,
                 FOREIGN KEY (target_id) REFERENCES ideas(id) ON DELETE CASCADE
             );
+
             """
         )
 
@@ -987,6 +1229,19 @@ class BrainstormStore:
             idea_id=cast(str, row["idea_id"]),
             content=cast(str, row["content"]),
             created_at=cast(str, row["created_at"]),
+        )
+
+    def _idea_draft_from_row(self, row: sqlite3.Row) -> IdeaDraft:
+        return IdeaDraft(
+            draft_id=cast(int, row["id"]),
+            raw_message=cast(str, row["raw_message"]),
+            source=cast(str, row["source"]),
+            status=IdeaDraftStatus(cast(str, row["status"])),
+            created_at=cast(str, row["created_at"]),
+            updated_at=cast(str, row["updated_at"]),
+            refinement_prompt=cast(str, row["refinement_prompt"]),
+            last_refined_at=cast(str | None, row["last_refined_at"]),
+            accepted_idea_id=cast(str | None, row["accepted_idea_id"]),
         )
 
     def _comment_from_row(self, row: sqlite3.Row) -> Comment:

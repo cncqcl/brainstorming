@@ -76,12 +76,62 @@ class ApiApp:
         if segments == ["api", "graph"] and method == "GET":
             return ApiResponse(200, self.store.get_knowledge_graph().to_dict())
 
+        if segments == ["api", "drafts"] and method == "GET":
+            drafts = [draft.to_dict() for draft in self.store.list_idea_drafts()]
+            return ApiResponse(200, {"drafts": drafts})
+
+        if segments == ["api", "drafts"] and method == "POST":
+            body = _payload(payload)
+            draft = self.store.capture_idea_draft(
+                raw_message=_text(body, "raw_message"),
+                source=_text(body, "source", default="dashboard"),
+            )
+            return ApiResponse(201, draft.to_dict())
+
+        if len(segments) >= 3 and segments[:2] == ["api", "drafts"]:
+            draft_id = _integer(segments[2], "draft_id")
+            if len(segments) == 3 and method == "GET":
+                return ApiResponse(200, self.store.get_idea_draft(draft_id).to_dict())
+            if len(segments) == 4:
+                return self._dispatch_draft_child(
+                    method,
+                    draft_id,
+                    segments[3],
+                    payload,
+                )
+
         if len(segments) >= 3 and segments[:2] == ["api", "ideas"]:
             idea_id = segments[2]
             if len(segments) == 3 and method == "GET":
                 return ApiResponse(200, self.store.get_idea(idea_id).to_dict())
             if len(segments) == 4:
                 return self._dispatch_idea_child(method, idea_id, segments[3], payload)
+
+        return ApiResponse(404, {"error": "not_found", "message": "Unknown route"})
+
+    def _dispatch_draft_child(
+        self,
+        method: str,
+        draft_id: int,
+        child: str,
+        payload: Payload,
+    ) -> ApiResponse:
+        if child == "refine-prompt" and method == "POST":
+            prompt = self.store.refinement_prompt(draft_id)
+            draft = self.store.get_idea_draft(draft_id)
+            return ApiResponse(200, {"prompt": prompt, "draft": draft.to_dict()})
+
+        if child == "accept" and method == "POST":
+            body = _payload(payload)
+            draft = self.store.accept_idea_draft(
+                draft_id,
+                _text(body, "idea_id"),
+            )
+            return ApiResponse(200, draft.to_dict())
+
+        if child == "archive" and method == "POST":
+            draft = self.store.archive_idea_draft(draft_id)
+            return ApiResponse(200, draft.to_dict())
 
         return ApiResponse(404, {"error": "not_found", "message": "Unknown route"})
 
@@ -197,6 +247,13 @@ def _optional_text(body: Mapping[str, object], key: str) -> str | None:
     if not isinstance(value, str):
         raise ValidationError(f"{key} must be a string")
     return value if value.strip() else None
+
+
+def _integer(value: str, field_name: str) -> int:
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ValidationError(f"{field_name} must be an integer") from exc
 
 
 def _status(value: object) -> IdeaStatus:
