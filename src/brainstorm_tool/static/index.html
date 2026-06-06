@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Brainstorm Workspace</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">
+        <span class="brand-mark">B</span>
+        <span>Brainstorm</span>
+      </a>
+      <nav class="top-actions">
+        <button id="refreshButton" class="ghost-button" type="button">Refresh</button>
+      </nav>
+    </header>
+
+    <main id="app" class="workspace" aria-live="polite"></main>
+
+    <template id="overviewTemplate">
+      <section class="overview-grid">
+        <div class="list-surface">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Ideas</p>
+              <h1>Overview</h1>
+            </div>
+            <span id="ideaCount" class="counter">0</span>
+          </div>
+          <div id="ideaList" class="idea-list"></div>
+        </div>
+
+        <div class="graph-surface">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Map</p>
+              <h2>Knowledge Graph</h2>
+            </div>
+          </div>
+          <svg id="graphSvg" class="graph" role="img"></svg>
+        </div>
+
+        <form id="newIdeaForm" class="entry-surface">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Register</p>
+              <h2>New Idea</h2>
+            </div>
+          </div>
+          <label>
+            Title
+            <input name="title" required autocomplete="off" />
+          </label>
+          <label>
+            Brief
+            <input name="brief" required autocomplete="off" />
+          </label>
+          <label>
+            Status
+            <select name="status">
+              <option value="seed">Seed</option>
+              <option value="exploring">Exploring</option>
+              <option value="active">Active</option>
+              <option value="paused">Paused</option>
+              <option value="researched">Researched</option>
+              <option value="shipped">Shipped</option>
+              <option value="archived">Archived</option>
+            </select>
+          </label>
+          <label>
+            Content
+            <textarea name="content" required rows="8"></textarea>
+          </label>
+          <button class="primary-button" type="submit">Create</button>
+        </form>
+      </section>
+    </template>
+
+    <template id="detailTemplate">
+      <section class="detail-layout">
+        <div class="detail-main">
+          <div class="detail-titlebar">
+            <a class="back-link" href="/">Back</a>
+            <div>
+              <p id="detailStatus" class="eyebrow"></p>
+              <h1 id="detailTitle"></h1>
+              <p id="detailBrief" class="brief"></p>
+            </div>
+            <span id="detailVersion" class="version-pill"></span>
+          </div>
+
+          <div class="editor-toolbar">
+            <select id="statusSelect"></select>
+            <button id="editButton" class="ghost-button" type="button">Edit</button>
+            <button id="saveButton" class="primary-button" type="button" disabled>
+              Save
+            </button>
+            <button id="closeEditButton" class="ghost-button" type="button" disabled>
+              Close Edit
+            </button>
+            <span id="draftState" class="draft-state"></span>
+          </div>
+
+          <textarea id="ideaContent" class="content-editor" readonly></textarea>
+
+          <div class="split-row">
+            <form id="commentForm" class="note-surface">
+              <h2>Comments</h2>
+              <div id="commentsList" class="stack"></div>
+              <input name="author" value="user" />
+              <input name="topic" placeholder="Topic" />
+              <textarea name="body" rows="3" required></textarea>
+              <button class="secondary-button" type="submit">Add Comment</button>
+            </form>
+
+            <form id="attachmentForm" class="note-surface">
+              <h2>Attachments</h2>
+              <div id="attachmentsList" class="stack"></div>
+              <input name="label" placeholder="Label" required />
+              <input name="uri" placeholder="Path or URL" required />
+              <input name="topic" placeholder="Topic" />
+              <input name="media_type" placeholder="Media type" />
+              <button class="secondary-button" type="submit">Add Attachment</button>
+            </form>
+          </div>
+
+          <div class="split-row">
+            <form id="annotationForm" class="note-surface">
+              <h2>Annotations</h2>
+              <div id="annotationsList" class="stack"></div>
+              <textarea name="body" rows="4" required></textarea>
+              <button class="secondary-button" type="submit">Add Annotation</button>
+            </form>
+          </div>
+
+          <form id="agentForm" class="agent-surface">
+            <h2>Agent Research</h2>
+            <div id="agentNotesList" class="stack"></div>
+            <div class="agent-grid">
+              <input name="topic" placeholder="Topic" required />
+              <input name="source_url" placeholder="Source URL" />
+              <textarea name="body" rows="4" placeholder="Findings" required></textarea>
+              <textarea
+                name="recommendation"
+                rows="4"
+                placeholder="Recommendation"
+                required
+              ></textarea>
+            </div>
+            <button class="secondary-button" type="submit">Add Research</button>
+          </form>
+        </div>
+
+        <aside class="detail-aside">
+          <section class="history-surface">
+            <div class="section-header">
+              <div>
+                <p class="eyebrow">Versions</p>
+                <h2>History</h2>
+              </div>
+            </div>
+            <div id="historyList" class="history-list"></div>
+          </section>
+
+          <section class="history-surface">
+            <div class="section-header">
+              <div>
+                <p class="eyebrow">Drafts</p>
+                <h2>Cache</h2>
+              </div>
+            </div>
+            <div id="draftList" class="history-list"></div>
+          </section>
+        </aside>
+      </section>
+    </template>
+
+    <dialog id="historyDialog">
+      <article>
+        <button id="dialogClose" class="ghost-button dialog-close" type="button">
+          Close
+        </button>
+        <p id="dialogMeta" class="eyebrow"></p>
+        <h2 id="dialogTitle"></h2>
+        <pre id="dialogContent"></pre>
+      </article>
+    </dialog>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
